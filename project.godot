@@ -1,0 +1,36 @@
+; Engine configuration file.
+; Mở bằng Godot 4.3 trở lên.
+
+config_version=5
+
+[application]
+
+config/name="Frontier Idle"
+config/description="Game idle khai thác - tự động hóa - giữ đất (bản prototype)"
+run/main_scene="res://scenes/Main.tscn"
+config/features=PackedStringArray("4.3", "GL Compatibility")
+
+[autoload]
+
+Data="*res://scripts/data.gd"
+Game="*res://scripts/game.gd"
+
+[display]
+
+window/size/viewport_width=720
+window/size/viewport_height=1280
+window/size/window_width_override=405
+window/size/window_height_override=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=1
+
+[input_devices]
+
+pointing/emulate_mouse_from_touch=true
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+environment/defaults/default_clear_color=Color(0.12, 0.15, 0.13, 1)

@@ -3,12 +3,14 @@
   200,
   300
  ],
- "anchor": [
+ "face_center": [
   100,
-  170
+  192.0
  ],
  "face_w": 164.0,
- "depth": 77,
+ "face_h": 132,
+ "squash": 0.929,
+ "depth": 34,
  "tiles": [
   "camp",
   "crystal",

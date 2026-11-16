@@ -158,6 +158,23 @@ func _draw() -> void:
 			_draw_tile(key, t)
 		elif Game.is_fog_edge(key):
 			_draw_fog(t)
+	_draw_selection()
+
+
+func _draw_selection() -> void:
+	## Vẽ sau cùng để không bị cây / núi của ô phía trước che mất.
+	if selected == "" or not Game.tiles.has(selected):
+		return
+	var t: Dictionary = Game.tiles[selected]
+	if not t["revealed"] and not Game.is_fog_edge(selected):
+		return
+	var top := Hex.corners(_tile_center(t))
+	var outline := top.duplicate()
+	outline.append(top[0])
+	var pulse := 0.5 + 0.5 * sin(_time * 4.0)
+	draw_colored_polygon(top, Color(1.0, 0.95, 0.6, 0.16 + 0.12 * pulse))
+	draw_polyline(outline, Color(0, 0, 0, 0.45), 7.0)
+	draw_polyline(outline, Color(1.0, 0.88, 0.4, 0.8 + 0.2 * pulse), 3.5)
 
 
 func _draw_fog(t: Dictionary) -> void:
@@ -224,8 +241,6 @@ func _draw_tile(key: String, t: Dictionary) -> void:
 		draw_arc(c + Vector2(0, -40), 13, 0, TAU, 24, Color(0, 0, 0, 0.5), 6.0)
 		draw_arc(c + Vector2(0, -40), 13, -PI / 2, -PI / 2 + TAU * p, 24, Color(1, 0.9, 0.4), 4.0)
 
-	if key == selected:
-		draw_polyline(outline, Color(1, 1, 1, 0.95), 3.0)
 
 
 func _draw_buildings(t: Dictionary, c: Vector2) -> void:

@@ -277,6 +277,9 @@ def main():
     for name in ("grass", "grass_flowers", "grass_tall", "field", "water"):
         a = np.array(tiles[name])
         a[:, :, 3] = np.where(sil, a[:, :, 3], 0)
+        # cắt đáy: mặt trên cao ~130px + hông ~36px tính từ mép trên của ô
+        ys = np.nonzero(a[:, :, 3] > 0)[0]
+        a[int(ys.min()) + 168:, :, 3] = 0
         # bỏ mẩu nhỏ dính mép (vd ngọn cây của ô bên dưới)
         m = a[:, :, 3] > 0
         lab, n = ndimage.label(ndimage.binary_erosion(m, iterations=3))
@@ -284,6 +287,13 @@ def main():
             sizes = ndimage.sum(m, lab, range(1, n + 1))
             main = ndimage.binary_dilation(lab == 1 + int(np.argmax(sizes)), iterations=5) & m
             a[:, :, 3] = np.where(main, a[:, :, 3], 0)
+        # xoá các hàng hẹp ở đáy (ngọn cây ô dưới lọt vào)
+        m = a[:, :, 3] > 0
+        widths = m.sum(axis=1)
+        y = m.shape[0] - 1
+        while y > 0 and widths[y] < 0.3 * widths.max():
+            a[y, :, 3] = 0
+            y -= 1
         tiles[name] = Image.fromarray(a, "RGBA")
 
     # ---------- asset tự tạo (ghép + đổi màu) ----------
@@ -343,12 +353,23 @@ def main():
     for name, img in tiles.items():
         img.save(os.path.join(OUT_TILES, name + ".png"))
 
-    a = np.array(tiles["dirt"])[:, :, 3] > 0
-    ys = np.nonzero(a)[0]
-    half_h = ANCHOR[1] - ys.min()
-    depth = int(ys.max() - ANCHOR[1] - half_h)
-    print("face_w", face_w, "half_h", half_h, "squash", round(4 * half_h / face_w / 3 ** 0.5, 3), "depth", depth)
-    meta = {"canvas": [TILE_W, TILE_H], "anchor": list(ANCHOR), "face_w": face_w, "depth": depth,
+    # Đo mặt trên thật của ô dirt: mặt đất sáng, phần hông tối hơn hẳn.
+    d = np.array(tiles["dirt"]).astype(int)
+    ys = np.nonzero(d[:, 100, 3] > 0)[0]
+    top, bottom = int(ys.min()), int(ys.max())
+    bright = d[:, 100, :3].sum(axis=1) / 3
+    face_bottom = top + 20
+    for y in range(top + 20, bottom):
+        if bright[y] < 110 and bright[y + 2] < 110:
+            face_bottom = y
+            break
+    face_h = face_bottom - top
+    center_y = top + face_h / 2.0
+    squash = face_h / (face_w * 3 ** 0.5 / 2)
+    depth = bottom - face_bottom
+    print("face_w", face_w, "face_h", face_h, "center_y", center_y, "squash", round(squash, 3), "depth", depth)
+    meta = {"canvas": [TILE_W, TILE_H], "face_center": [ANCHOR[0], center_y], "face_w": face_w,
+            "face_h": face_h, "squash": round(squash, 3), "depth": depth,
             "tiles": sorted(tiles.keys()), "props": sorted(props.keys())}
     with open(os.path.join(OUT_TILES, "meta.json"), "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=1)

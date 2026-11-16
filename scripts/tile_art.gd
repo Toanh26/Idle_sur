@@ -3,9 +3,9 @@ extends RefCounted
 ## Mọi ảnh ô có cùng canvas; tâm mặt trên ô nằm ở ANCHOR. Thiếu ảnh thì hàm vẽ trả về false để dùng hình vẽ tạm.
 
 const CANVAS := Vector2(200, 300)
-const ANCHOR := Vector2(100, 170)
+const ANCHOR := Vector2(100, 192)  # tâm mặt trên ô trong canvas
 const FACE_W := 164.0     # bề rộng mặt trên ô trong canvas
-const DEPTH := 77.0       # chiều dày phần đất bên hông trong canvas
+const DEPTH := 34.0       # chiều dày phần đất bên hông trong canvas
 
 var _cache := {}
 

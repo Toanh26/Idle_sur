@@ -29,7 +29,7 @@ Chưa làm (theo lộ trình): thời kỳ 2 trở đi, cáp treo, gương thôn
 
 Ô đất và công trình lấy từ sprite sheet `art_source/sheet_village.png`. Script `tools/slice_assets.py` cắt sheet, xoá nền và tạo:
 
-- `assets/tiles/*.png` – ô lục giác đỉnh phẳng, cùng canvas 200×300, tâm mặt trên ở (100, 170). Gồm ô gốc (cỏ, cỏ hoa, cỏ dài, đất, rừng, núi, đá, hồ, ruộng) và **ô tự ghép thêm**: làng, đồn thổ phỉ, rừng thông dày, rừng thu, mỏ đá có thợ, ruộng có cối xay, hồ có bến thuyền, núi tuyết, sương mù, và sẵn cho thời kỳ sau: đất hoang, đất nhiễm độc, mỏ tinh thể.
+- `assets/tiles/*.png` – ô lục giác đỉnh phẳng, cùng canvas 200×300, tâm mặt trên ở (100, 192), mặt trên rộng 164 px, tỉ lệ dẹt 0.93 (xem `assets/tiles/meta.json`). Gồm ô gốc (cỏ, cỏ hoa, cỏ dài, đất, rừng, núi, đá, hồ, ruộng) và **ô tự ghép thêm**: làng, đồn thổ phỉ, rừng thông dày, rừng thu, mỏ đá có thợ, ruộng có cối xay, hồ có bến thuyền, núi tuyết, sương mù, và sẵn cho thời kỳ sau: đất hoang, đất nhiễm độc, mỏ tinh thể.
 - `assets/props/*.png` – nhà, tháp, cối xay, chợ, giếng, tinh thể, bến, cờ, thùng, cây, đá, hoa, hàng rào, đèn…
 
 Muốn thêm/đổi asset: sửa `TILE_BOXES` / `PROP_BOXES` hoặc phần "asset tự tạo" trong script rồi chạy:

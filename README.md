@@ -21,7 +21,7 @@ Prototype 2D màn hình dọc làm bằng **Godot 4.3+** (GDScript), theo tài l
 - **Tấn công đồn địch**: chọn quân → trận tự đánh trên bàn lục giác, chỉ có nút **Rút quân** và tăng tốc. Thắng thì chiếm ô xung quanh, mở sương mù. 8 đồn, đồn cuối là sào huyệt thủ lĩnh.
 - **Phòng thủ**: đợt cướp mỗi 30 phút; xây hàng rào, tháp cung trên đồng cỏ; quân ở nhà góp 50% sức mạnh.
 - **AFK/offline**: tự lưu mỗi 30 giây; mở lại game sẽ tính tối đa 12 giờ vắng mặt (thợ 50%, máy 100%) và báo nút thắt.
-- **Công cụ riêng** (tab Làng & Kho): tăng tốc thế giới x5/x20, +500 tài nguyên, xóa save.
+- **Tab Cài đặt**: lưu ngay, chơi lại từ đầu (có bước xác nhận), tăng tốc thế giới x5/x20, +500 tài nguyên.
 
 Chưa làm (theo lộ trình): thời kỳ 2 trở đi, cáp treo, gương thông, cổng dịch chuyển, nghiên cứu, Tái thiết, Bảo tàng.
 

@@ -126,11 +126,11 @@ func _build_tabs() -> void:
 	hb.add_theme_constant_override("separation", 6)
 	hb.mouse_filter = Control.MOUSE_FILTER_STOP
 	root.add_child(hb)
-	for pair in [["map", "Bản đồ"], ["skills", "Ngành nghề"], ["army", "Quân đội"], ["village", "Làng & Kho"]]:
+	for pair in [["map", "Bản đồ"], ["skills", "Ngành nghề"], ["army", "Quân đội"], ["village", "Làng & Kho"], ["settings", "Cài đặt"]]:
 		var b := Button.new()
 		b.text = pair[1]
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.add_theme_font_size_override("font_size", 20)
+		b.add_theme_font_size_override("font_size", 18)
 		b.pressed.connect(_on_tab.bind(pair[0]))
 		hb.add_child(b)
 		tab_buttons[pair[0]] = b
@@ -247,6 +247,8 @@ func _rebuild() -> void:
 			_build_army_tab()
 		"village":
 			_build_village_tab()
+		"settings":
+			_build_settings_tab()
 	for f in _live:
 		f.call()
 
@@ -621,13 +623,37 @@ func _build_village_tab() -> void:
 	_sep()
 	_sub("Nhật ký")
 	_label(func(): return "\n".join(PackedStringArray(Game.log_lines.slice(0, 10))))
+
+
+# =====================================================================
+#  Tab Cài đặt
+# =====================================================================
+func _build_settings_tab() -> void:
+	_title("Cài đặt")
+	_label(func(): return "Thời gian đã chơi: %s · Tự lưu mỗi %d giây." % [_fmt_time(Game.play_time), int(Data.AUTOSAVE_SEC)])
+	_button("Lưu ngay", _save_now)
 	_sep()
-	_sub("Công cụ riêng (dev)")
+	_sub("Chơi lại từ đầu")
+	if not _reset_armed:
+		_label("Xóa toàn bộ tiến độ (tài nguyên, thuần thục, lãnh thổ, quân đội) và bắt đầu lại ở làng quê.")
+		_button("Chơi lại từ đầu", _arm_reset)
+	else:
+		var warn := _label("Bạn chắc chắn muốn xóa save? Không thể hoàn tác.")
+		warn.add_theme_color_override("font_color", Color("ff8a7a"))
+		var row := _row()
+		_button("Xóa và chơi lại", _do_reset, Callable(), row)
+		_button("Hủy", _cancel_reset, Callable(), row)
+	_sep()
+	_sub("Công cụ thử nghiệm")
 	var row2 := _row()
-	_button(func(): return "Tốc độ x%d" % int(Game.world_speed), func(): _cycle_speed(), Callable(), row2)
+	_button(func(): return "Tốc độ thế giới x%d" % int(Game.world_speed), func(): _cycle_speed(), Callable(), row2)
 	_button("+500 mỗi loại", func(): _cheat(), Callable(), row2)
-	_button("Lưu ngay", _save_now, Callable(), row2)
-	_button("Chơi lại từ đầu (xóa save)", func(): _confirm_reset())
+
+
+func _fmt_time(s: float) -> String:
+	var h := int(s) / 3600
+	var m := (int(s) % 3600) / 60
+	return "%d giờ %d phút" % [h, m]
 
 
 func _save_now() -> void:
@@ -649,11 +675,26 @@ func _cheat() -> void:
 var _reset_armed := false
 
 
-func _confirm_reset() -> void:
-	if not _reset_armed:
-		_reset_armed = true
-		Game.add_log("Bấm 'Chơi lại từ đầu' thêm lần nữa để xóa save.")
-		return
+func _arm_reset() -> void:
+	_reset_armed = true
+	_rebuild()
+
+
+func _cancel_reset() -> void:
+	_reset_armed = false
+	_rebuild()
+
+
+func _do_reset() -> void:
 	_reset_armed = false
 	selected = ""
+	army_pick = {}
+	popup.visible = false
+	if map_view:
+		map_view.selected = ""
+		map_view.cam.position = Vector2(0, 170)
+	Game.world_speed = 1.0
 	Game.reset_game()
+	tab = "map"
+	_rebuild()
+	show_popup("Bắt đầu lại", "Đã xóa save. Một làng quê yên bình bên sông đang chờ bạn.")

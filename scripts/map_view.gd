@@ -1,11 +1,11 @@
 extends Node2D
 ## Vẽ bản đồ lục giác góc nhìn 3/4 và xử lý chạm / kéo / thu phóng.
-## Hình tạm được vẽ bằng code. Nếu có file res://assets/tiles/<loại>.png thì dùng ảnh đó thay thế
-## (loại: village, forest, rock, field, grass, water, camp).
+## Ảnh ô lấy từ assets/tiles (tạo bởi tools/slice_assets.py); thiếu ảnh nào thì vẽ hình tạm bằng code.
 
 signal tile_tapped(key: String)
 
 const Hex = preload("res://scripts/hex.gd")
+const TileArt = preload("res://scripts/tile_art.gd")
 const ZOOM_MIN := 0.55
 const ZOOM_MAX := 2.2
 const PAN_LIMIT := 800.0
@@ -17,7 +17,7 @@ var _dragging := false
 var _press_pos := Vector2.ZERO
 var _touches := {}
 var _pinch_dist := 0.0
-var _tex_cache := {}
+var art = TileArt.new()
 var _time := 0.0
 var _font: Font
 
@@ -122,15 +122,33 @@ func _tile_center(t: Dictionary) -> Vector2:
 	return Hex.to_pixel(int(t["q"]), int(t["r"])) + Vector2(0, -elev * Hex.ELEV_PX)
 
 
-func _tex(type: String) -> Texture2D:
-	if _tex_cache.has(type):
-		return _tex_cache[type]
-	var path := "res://assets/tiles/%s.png" % type
-	var tex: Texture2D = null
-	if ResourceLoader.exists(path):
-		tex = load(path)
-	_tex_cache[type] = tex
-	return tex
+func _hash(t: Dictionary) -> int:
+	return absi(int(t["q"]) * 73856093 ^ int(t["r"]) * 19349663)
+
+
+func _sprite_name(t: Dictionary) -> String:
+	## Chọn ảnh ô theo loại, trạng thái và biến thể ngẫu nhiên cố định theo toạ độ.
+	var h := _hash(t)
+	match String(t["type"]):
+		"village":
+			return "village"
+		"forest":
+			var v := h % 10
+			return "forest_autumn" if v == 0 else ("forest_small" if v < 4 else "forest")
+		"rock":
+			if int(t["elev"]) >= 2:
+				return "mountain_snow" if h % 3 == 0 else "mountain"
+			return "quarry" if int(t["npcs"]) > 0 or int(t["machine"]) > 0 else "rocks"
+		"field":
+			return "field_mill" if int(t["machine"]) > 0 else "field"
+		"grass":
+			var g := h % 6
+			return "grass_flowers" if g < 2 else ("grass_tall" if g < 4 else "grass")
+		"water":
+			return "water_dock" if h % 5 == 0 else "water"
+		"camp":
+			return "camp"
+	return "grass"
 
 
 func _draw() -> void:
@@ -144,62 +162,110 @@ func _draw() -> void:
 
 func _draw_fog(t: Dictionary) -> void:
 	var c := _tile_center(t)
+	if art.draw_tile(self, "fog", c, Hex.SIZE, Color(1, 1, 1, 0.9)):
+		return
 	var top := Hex.corners(c)
 	_draw_sides(top, 8.0, Color(0.16, 0.18, 0.19))
 	draw_colored_polygon(top, Color(0.25, 0.28, 0.3))
-	draw_string(_font, c + Vector2(-6, 8), "?", HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color(0.55, 0.6, 0.62))
 
 
 func _draw_sides(top: PackedVector2Array, depth: float, col: Color) -> void:
-	## Vẽ 2 mặt hông nhìn thấy được (cạnh dưới-phải và dưới-trái) thành 2 tứ giác lồi riêng.
+	## 3 mặt hông nhìn thấy của ô đỉnh phẳng: dưới-phải, dưới, dưới-trái. Mỗi mặt là một tứ giác lồi.
 	if depth <= 0.5:
 		return
 	var d := Vector2(0, depth)
-	var right := PackedVector2Array([top[1], top[2], top[2] + d, top[1] + d])
-	var left := PackedVector2Array([top[2], top[3], top[3] + d, top[2] + d])
-	draw_colored_polygon(right, col)
-	draw_colored_polygon(left, col.darkened(0.15))
+	draw_colored_polygon(PackedVector2Array([top[0], top[1], top[1] + d, top[0] + d]), col)
+	draw_colored_polygon(PackedVector2Array([top[1], top[2], top[2] + d, top[1] + d]), col.darkened(0.08))
+	draw_colored_polygon(PackedVector2Array([top[2], top[3], top[3] + d, top[2] + d]), col.darkened(0.18))
 
 
 func _draw_tile(key: String, t: Dictionary) -> void:
 	var type: String = t["type"]
 	var c := _tile_center(t)
 	var top := Hex.corners(c)
-	var col: Color = Data.TILES[type]["color"]
-	if not t["owned"]:
-		col = col.darkened(0.35)
-	_draw_sides(top, int(t["elev"]) * Hex.ELEV_PX + 8.0, col.darkened(0.45))
-	draw_colored_polygon(top, col)
+	var elev := int(t["elev"])
+	var mod := Color.WHITE if t["owned"] or type == "camp" else Color(0.62, 0.62, 0.62)
 	var outline := top.duplicate()
 	outline.append(top[0])
-	draw_polyline(outline, col.darkened(0.3), 2.0)
 
-	var tex := _tex(type)
-	if tex:
-		draw_texture_rect(tex, Rect2(c.x - 42, c.y - 62, 84, 84), false)
+	if art.has_tile(_sprite_name(t)):
+		# Ô được nâng cao: vẽ thêm cột đất phía dưới phần đất có sẵn trong ảnh.
+		if elev > 0:
+			var base_top := Hex.corners(c + Vector2(0, art.side_depth(Hex.SIZE) - 2.0))
+			_draw_sides(base_top, elev * Hex.ELEV_PX + 2.0, Color("5c3f27") * mod)
+		art.draw_tile(self, _sprite_name(t), c, Hex.SIZE, mod)
 	else:
+		var col: Color = Data.TILES[type]["color"]
+		if not t["owned"]:
+			col = col.darkened(0.35)
+		_draw_sides(top, elev * Hex.ELEV_PX + 8.0, col.darkened(0.45))
+		draw_colored_polygon(top, col)
+		draw_polyline(outline, col.darkened(0.3), 2.0)
 		_draw_decor(type, c, t)
 
 	_draw_buildings(t, c)
 
-	# Lãnh thổ chưa sở hữu: viền tối
-	if t["owned"] and type != "camp":
-		draw_polyline(outline, Color(1, 0.95, 0.7, 0.25), 1.0)
+	if type == "camp":
+		var idx := int(t["camp"])
+		draw_string(_font, c + Vector2(-50, 32), "Sức mạnh %d" % Data.camp_power(idx), HORIZONTAL_ALIGNMENT_CENTER, 100, 14, Color(1, 0.8, 0.75))
 
 	# Bãi chứa
 	var stock := float(t["stock"])
 	if stock >= 1.0:
 		var full := stock >= Data.STOCK_CAP - 0.5
-		var col_s := Color(1, 0.45, 0.35) if full else Color(1, 0.95, 0.75)
-		draw_string(_font, c + Vector2(-22, 26), "%d" % int(stock), HORIZONTAL_ALIGNMENT_CENTER, 44, 15, col_s)
+		var col_s := Color(1, 0.45, 0.35) if full else Color(1, 0.97, 0.8)
+		var tag := Rect2(c.x - 18, c.y + 14, 36, 18)
+		draw_rect(tag, Color(0, 0, 0, 0.55))
+		draw_string(_font, Vector2(tag.position.x, tag.position.y + 14), "%d" % int(stock), HORIZONTAL_ALIGNMENT_CENTER, 36, 14, col_s)
 
 	# Thao tác tay đang chạy
 	var p := Game.manual_progress(key)
 	if p > 0.0:
-		draw_arc(c + Vector2(0, -34), 13, -PI / 2, -PI / 2 + TAU * p, 24, Color(1, 0.9, 0.4), 4.0)
+		draw_arc(c + Vector2(0, -40), 13, 0, TAU, 24, Color(0, 0, 0, 0.5), 6.0)
+		draw_arc(c + Vector2(0, -40), 13, -PI / 2, -PI / 2 + TAU * p, 24, Color(1, 0.9, 0.4), 4.0)
 
 	if key == selected:
-		draw_polyline(outline, Color(1, 1, 1, 0.9), 3.5)
+		draw_polyline(outline, Color(1, 1, 1, 0.95), 3.0)
+
+
+func _draw_buildings(t: Dictionary, c: Vector2) -> void:
+	var type: String = t["type"]
+	var npcs := int(t["npcs"])
+	if npcs > 0 and type != "rock":
+		if not art.draw_prop(self, "house_wood", c + Vector2(-30, 6), 34):
+			draw_rect(Rect2(c.x - 38, c.y - 6, 16, 12), Color("8a6a3f"))
+		draw_string(_font, c + Vector2(-44, 22), "x%d" % npcs, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color.WHITE)
+	elif npcs > 0:
+		draw_string(_font, c + Vector2(-44, 22), "x%d" % npcs, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color.WHITE)
+	if int(t["machine"]) > 0 and type != "field":
+		if not art.draw_prop(self, "windmill", c + Vector2(30, 4), 44):
+			draw_circle(c + Vector2(28, -14), 9, Color("55595e"))
+		var puff := fmod(_time, 1.5) / 1.5
+		draw_circle(c + Vector2(34, -42 - puff * 14), 4 + puff * 4, Color(0.9, 0.9, 0.9, 0.6 * (1.0 - puff)))
+	if t["crane"]:
+		var b := c + Vector2(-32, 12)
+		draw_line(b, b + Vector2(0, -46), Color("d9a43a"), 3.0)
+		draw_line(b + Vector2(-6, -46), b + Vector2(28, -46), Color("d9a43a"), 3.0)
+		var hook := 8.0 + (sin(_time * 1.6) * 0.5 + 0.5) * 20.0
+		draw_line(b + Vector2(24, -46), b + Vector2(24, -46 + hook), Color("333333"), 1.5)
+		if not art.draw_prop(self, "crate", b + Vector2(24, -40 + hook + 10), 12):
+			draw_rect(Rect2(b.x + 20, b.y - 46 + hook, 8, 6), Color("8a6a3f"))
+	if int(t["porters"]) > 0:
+		var dir := Hex.to_pixel(0, 0) - Hex.to_pixel(int(t["q"]), int(t["r"]))
+		var n := int(t["porters"])
+		for i in mini(n, 3):
+			var k := fmod(_time * 0.35 + i * 0.33, 1.0)
+			var along := c + dir.normalized() * minf(dir.length(), 44.0) * (k if k < 0.5 else 1.0 - k) * 2.0
+			draw_circle(along + Vector2(0, 12), 4.0, Color(0, 0, 0, 0.3))
+			draw_circle(along + Vector2(0, 8), 3.5, Color("f0d9a0"))
+	var st: String = t["structure"]
+	if st == "rao":
+		if not art.draw_prop(self, "fence", c + Vector2(0, 16), 22):
+			draw_line(c + Vector2(-26, 0), c + Vector2(26, 0), Color("9a8248"), 2.0)
+		art.draw_prop(self, "fence", c + Vector2(-14, -4), 18)
+	elif st == "thap_cung":
+		if not art.draw_prop(self, "tower", c + Vector2(0, 14), 70):
+			draw_rect(Rect2(c.x - 9, c.y - 34, 18, 40), Color("8a6a3f"))
 
 
 func _draw_decor(type: String, c: Vector2, t: Dictionary) -> void:
@@ -246,8 +312,6 @@ func _draw_decor(type: String, c: Vector2, t: Dictionary) -> void:
 			draw_line(p + Vector2(16, -2), p + Vector2(16, -34), Color("3a2a1a"), 2.0)
 			var wave := sin(_time * 4.0) * 2.0
 			draw_colored_polygon(PackedVector2Array([p + Vector2(16, -34), p + Vector2(30, -30 + wave), p + Vector2(16, -26)]), Color("d23c2c"))
-			var idx := int(t["camp"])
-			draw_string(_font, c + Vector2(-40, 30), "Sức mạnh %d" % Data.camp_power(idx), HORIZONTAL_ALIGNMENT_CENTER, 80, 14, Color(1, 0.75, 0.7))
 
 
 func _draw_house(p: Vector2, s: float) -> void:
@@ -256,43 +320,3 @@ func _draw_house(p: Vector2, s: float) -> void:
 	draw_rect(Rect2(p.x - 3 * s, p.y - 4 * s, 6 * s, 8 * s), Color("6b4a2c"))
 
 
-func _draw_buildings(t: Dictionary, c: Vector2) -> void:
-	var npcs := int(t["npcs"])
-	if npcs > 0:
-		var p := c + Vector2(-30, -16)
-		draw_rect(Rect2(p.x - 8, p.y - 6, 16, 12), Color("8a6a3f"))
-		draw_colored_polygon(PackedVector2Array([p + Vector2(-10, -6), p + Vector2(10, -6), p + Vector2(0, -14)]), Color("5e4326"))
-		draw_string(_font, p + Vector2(-8, 22), "x%d" % npcs, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color.WHITE)
-	if int(t["machine"]) > 0:
-		var g := c + Vector2(28, -14)
-		var a := _time * 2.5
-		draw_circle(g, 9, Color("55595e"))
-		for i in 6:
-			var ang := a + i * TAU / 6.0
-			draw_line(g, g + Vector2(cos(ang), sin(ang)) * 12.0, Color("7d838a"), 3.0)
-		draw_circle(g, 4, Color("c9a24a"))
-		var puff := fmod(_time, 1.5) / 1.5
-		draw_circle(g + Vector2(4, -14 - puff * 14), 4 + puff * 4, Color(0.85, 0.85, 0.85, 0.6 * (1.0 - puff)))
-	if t["crane"]:
-		var b := c + Vector2(-26, 14)
-		draw_line(b, b + Vector2(0, -40), Color("d9a43a"), 3.0)
-		draw_line(b + Vector2(-6, -40), b + Vector2(26, -40), Color("d9a43a"), 3.0)
-		var hook := 8.0 + (sin(_time * 1.6) * 0.5 + 0.5) * 18.0
-		draw_line(b + Vector2(22, -40), b + Vector2(22, -40 + hook), Color("444444"), 1.5)
-		draw_rect(Rect2(b.x + 18, b.y - 40 + hook, 8, 6), Color("8a6a3f"))
-	if int(t["porters"]) > 0:
-		# chấm nhỏ chạy qua lại tượng trưng khuân vác
-		var dir := Hex.to_pixel(0, 0) - Hex.to_pixel(int(t["q"]), int(t["r"]))
-		var k := fmod(_time * 0.4, 1.0)
-		var along := c + dir.normalized() * minf(dir.length(), 40.0) * (k if k < 0.5 else 1.0 - k) * 2.0
-		draw_circle(along + Vector2(0, 10), 3.5, Color("f0d9a0"))
-	var st: String = t["structure"]
-	if st == "rao":
-		for i in 5:
-			var x := -24.0 + i * 12.0
-			draw_line(c + Vector2(x, 10), c + Vector2(x, -6), Color("b39a5a"), 3.0)
-		draw_line(c + Vector2(-26, 0), c + Vector2(26, 0), Color("9a8248"), 2.0)
-	elif st == "thap_cung":
-		draw_rect(Rect2(c.x - 9, c.y - 34, 18, 40), Color("8a6a3f"))
-		draw_rect(Rect2(c.x - 13, c.y - 40, 26, 8), Color("6b4f2a"))
-		draw_colored_polygon(PackedVector2Array([c + Vector2(-14, -40), c + Vector2(14, -40), c + Vector2(0, -54)]), Color("a2452f"))

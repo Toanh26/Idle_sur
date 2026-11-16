@@ -5,6 +5,7 @@ extends CanvasLayer
 signal finished(win: bool)
 
 const Hex = preload("res://scripts/hex.gd")
+const TileArt = preload("res://scripts/tile_art.gd")
 
 var arena: Control
 var title_label: Label
@@ -21,6 +22,8 @@ var time := 0.0
 var running := false
 var speed := 1
 var _font: Font
+var art = TileArt.new()
+var _board: Array = []
 
 
 func _ready() -> void:
@@ -297,20 +300,12 @@ func _toggle_speed() -> void:
 # ---------------------------------------------------------------- vẽ
 func _draw_arena() -> void:
 	var size := arena.size
-	# bàn lục giác
-	var hs := 34.0
-	var w := hs * sqrt(3.0)
-	var h := hs * 1.5 * Hex.SQUASH * 1.25
-	var rows := int(size.y * 0.62 / h)
-	var start_y := size.y * 0.16
-	for r in rows:
-		var off := (w / 2.0) if r % 2 == 1 else 0.0
-		var cols := int(size.x / w) + 2
-		for q in cols:
-			var c := Vector2(q * w + off - w / 2.0, start_y + r * h)
-			var pts := Hex.corners(c, hs - 2.0)
-			var shade := 0.04 * ((q + r) % 2)
-			draw_hex(pts, Color(0.30 + shade, 0.36 + shade, 0.24))
+	# bàn lục giác dùng ảnh ô cỏ; vòng ngoài là rừng
+	if _board.is_empty() or _board[0]["w"] != size.x:
+		_build_board(size)
+	for b in _board:
+		if not art.draw_tile(arena, b["name"], b["pos"], b["s"], b["mod"]):
+			draw_hex(Hex.corners(b["pos"], b["s"] - 2.0), Color(0.3, 0.36, 0.24))
 	# đạn
 	for s in shots:
 		var col := Color(0.6, 0.85, 1.0) if s["mine"] else Color(1.0, 0.6, 0.45)
@@ -340,6 +335,24 @@ func _draw_arena() -> void:
 	# chú thích
 	arena.draw_string(_font, Vector2(20, size.y * 0.17), "Địch", HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(1, 0.7, 0.65))
 	arena.draw_string(_font, Vector2(20, size.y * 0.78), "Quân ta", HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(0.7, 0.85, 1))
+
+
+func _build_board(size: Vector2) -> void:
+	_board.clear()
+	var hs := 42.0
+	var k := hs / Hex.SIZE
+	var center := Vector2(size.x / 2.0, size.y * 0.5)
+	var names := ["grass", "grass_flowers", "grass_tall"]
+	for c in Hex.coords_in_radius(Vector2i.ZERO, 9):
+		var pos: Vector2 = center + Hex.to_pixel(c.x, c.y) * k
+		if pos.x < -hs or pos.x > size.x + hs or pos.y < size.y * 0.1 or pos.y > size.y * 0.86:
+			continue
+		var edge := pos.x < hs * 1.2 or pos.x > size.x - hs * 1.2
+		var h := absi(c.x * 92821 ^ c.y * 68917)
+		var tname: String = ("forest_small" if h % 2 == 0 else "forest") if edge else names[h % 3]
+		_board.append({"pos": pos, "s": hs, "name": tname, "mod": Color(0.9, 0.9, 0.88), "w": size.x,
+			"y": pos.y})
+	_board.sort_custom(func(a, b): return float(a["y"]) < float(b["y"]))
 
 
 func draw_hex(pts: PackedVector2Array, col: Color) -> void:

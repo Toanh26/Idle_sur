@@ -120,12 +120,15 @@ func _rand_type(rng: RandomNumberGenerator) -> String:
 
 
 func _build_draw_order() -> void:
+	## Vẽ từ xa tới gần: ô có toạ độ màn hình y nhỏ hơn vẽ trước.
 	draw_order = tiles.keys()
 	draw_order.sort_custom(func(a, b):
 		var ta: Dictionary = tiles[a]
 		var tb: Dictionary = tiles[b]
-		if int(ta["r"]) != int(tb["r"]):
-			return int(ta["r"]) < int(tb["r"])
+		var ya := 2 * int(ta["r"]) + int(ta["q"])
+		var yb := 2 * int(tb["r"]) + int(tb["q"])
+		if ya != yb:
+			return ya < yb
 		return int(ta["q"]) < int(tb["q"]))
 
 

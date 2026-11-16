@@ -1,16 +1,16 @@
 extends RefCounted
-## Hàm hỗ trợ lưới lục giác (pointy-top, toạ độ axial q,r).
-## Trục Y bị ép lại (SQUASH) để tạo cảm giác nhìn 3/4 từ trên cao.
+## Hàm hỗ trợ lưới lục giác đỉnh phẳng (flat-top, toạ độ axial q,r) — khớp với bộ asset ô đất.
+## Trục Y bị ép lại (SQUASH) để tạo góc nhìn 3/4 từ trên cao.
 
 const SIZE := 48.0
-const SQUASH := 0.62
+const SQUASH := 0.634
 const ELEV_PX := 14.0
 const DIRS := [Vector2i(1, 0), Vector2i(1, -1), Vector2i(0, -1), Vector2i(-1, 0), Vector2i(-1, 1), Vector2i(0, 1)]
 
 
 static func to_pixel(q: int, r: int) -> Vector2:
-	var x := SIZE * sqrt(3.0) * (float(q) + float(r) / 2.0)
-	var y := SIZE * 1.5 * float(r) * SQUASH
+	var x := SIZE * 1.5 * float(q)
+	var y := SIZE * sqrt(3.0) * (float(r) + float(q) / 2.0) * SQUASH
 	return Vector2(x, y)
 
 
@@ -19,9 +19,10 @@ static func distance(a: Vector2i, b: Vector2i) -> int:
 
 
 static func corners(center: Vector2, size: float = SIZE) -> PackedVector2Array:
+	## Thứ tự: 0 phải, 1 dưới-phải, 2 dưới-trái, 3 trái, 4 trên-trái, 5 trên-phải.
 	var pts := PackedVector2Array()
 	for i in 6:
-		var ang := deg_to_rad(60.0 * i - 30.0)
+		var ang := deg_to_rad(60.0 * i)
 		pts.append(center + Vector2(size * cos(ang), size * sin(ang) * SQUASH))
 	return pts
 

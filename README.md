@@ -25,21 +25,21 @@ Prototype 2D màn hình dọc làm bằng **Godot 4.3+** (GDScript), theo tài l
 
 Chưa làm (theo lộ trình): thời kỳ 2 trở đi, cáp treo, gương thông, cổng dịch chuyển, nghiên cứu, Tái thiết, Bảo tàng.
 
-## Thay hình bằng asset miễn phí
+## Hình ảnh
 
-Hiện tại mọi hình được vẽ tạm bằng code. Game **tự dùng ảnh** nếu bạn đặt file PNG đúng tên vào:
+Ô đất và công trình lấy từ sprite sheet `art_source/sheet_village.png`. Script `tools/slice_assets.py` cắt sheet, xoá nền và tạo:
 
+- `assets/tiles/*.png` – ô lục giác đỉnh phẳng, cùng canvas 200×300, tâm mặt trên ở (100, 170). Gồm ô gốc (cỏ, cỏ hoa, cỏ dài, đất, rừng, núi, đá, hồ, ruộng) và **ô tự ghép thêm**: làng, đồn thổ phỉ, rừng thông dày, rừng thu, mỏ đá có thợ, ruộng có cối xay, hồ có bến thuyền, núi tuyết, sương mù, và sẵn cho thời kỳ sau: đất hoang, đất nhiễm độc, mỏ tinh thể.
+- `assets/props/*.png` – nhà, tháp, cối xay, chợ, giếng, tinh thể, bến, cờ, thùng, cây, đá, hoa, hàng rào, đèn…
+
+Muốn thêm/đổi asset: sửa `TILE_BOXES` / `PROP_BOXES` hoặc phần "asset tự tạo" trong script rồi chạy:
+
+```bash
+pip install pillow numpy scipy
+python3 tools/slice_assets.py
 ```
-assets/tiles/village.png   assets/tiles/forest.png   assets/tiles/rock.png
-assets/tiles/field.png     assets/tiles/grass.png    assets/tiles/water.png
-assets/tiles/camp.png
-```
 
-Kích thước gợi ý 84×84 px, vẽ ở góc nhìn 3/4, nền trong suốt. Nguồn asset miễn phí (kiểm tra giấy phép từng gói trước khi dùng):
-
-- **Kenney.nl** – các gói 2D giấy phép CC0 (ví dụ Hexagon Pack, Medieval RTS, Tiny Town).
-- **itch.io** – lọc *Free* + *2D* + từ khóa "hex tiles", "isometric", "painterly".
-- **OpenGameArt.org** – lọc giấy phép CC0 / CC-BY.
+Thiếu ảnh nào thì game tự vẽ hình tạm bằng code.
 
 ## Cấu trúc code
 
@@ -47,7 +47,8 @@ Kích thước gợi ý 84×84 px, vẽ ở góc nhìn 3/4, nền trong suốt. 
 |---|---|
 | `scripts/data.gd` | Toàn bộ số liệu cân bằng (autoload `Data`) |
 | `scripts/game.gd` | Trạng thái, mô phỏng, lưu/tải, offline (autoload `Game`) |
-| `scripts/hex.gd` | Toán lưới lục giác |
+| `scripts/hex.gd` | Toán lưới lục giác (đỉnh phẳng) |
+| `scripts/tile_art.gd` | Nạp và vẽ ảnh ô / đồ vật |
 | `scripts/map_view.gd` | Vẽ bản đồ, chạm/kéo/thu phóng |
 | `scripts/ui.gd` | Thanh tài nguyên, bảng thông tin, 4 tab |
 | `scripts/battle_view.gd` | Trận đánh tự động |

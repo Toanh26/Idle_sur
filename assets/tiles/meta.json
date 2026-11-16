@@ -4,13 +4,13 @@
   300
  ],
  "face_center": [
-  100,
-  192.0
+  100.0,
+  196.0
  ],
  "face_w": 164.0,
- "face_h": 132,
- "squash": 0.929,
- "depth": 34,
+ "squash": 0.67,
+ "depth": 30.0,
+ "orientation": "flat-top",
  "tiles": [
   "camp",
   "crystal",
@@ -54,6 +54,7 @@
   "log",
   "log_mushroom",
   "market",
+  "mountain_peaks",
   "pine",
   "pine2",
   "rock_a",

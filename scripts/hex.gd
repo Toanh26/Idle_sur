@@ -3,7 +3,7 @@ extends RefCounted
 ## Trục Y bị ép lại (SQUASH) để tạo góc nhìn 3/4 từ trên cao.
 
 const SIZE := 48.0
-const SQUASH := 0.93
+const SQUASH := 0.67
 const ELEV_PX := 14.0
 const DIRS := [Vector2i(1, 0), Vector2i(1, -1), Vector2i(0, -1), Vector2i(-1, 0), Vector2i(-1, 1), Vector2i(0, 1)]
 

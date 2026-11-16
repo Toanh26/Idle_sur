@@ -243,6 +243,155 @@ def recolor(img: Image.Image, mult, sat=1.0, bright=1.0):
     return out
 
 
+# =====================================================================
+#  Dựng lại ô thành lục giác ĐỈNH PHẲNG (cạnh trên/dưới nằm ngang)
+#  Ảnh gốc là lục giác đỉnh nhọn nhìn 3/4. Mặt trên được "trải phẳng", xoay 30° rồi ép lại;
+#  hông đất lấy từ dải đất của ảnh gốc rồi uốn vào 3 mặt hông mới; cây, đá, núi, nhà dán lên như đồ vật.
+# =====================================================================
+SRC_SQ = 0.67      # độ dẹt của ảnh gốc (đo từ ô dirt)
+OUT_SQ = 0.67      # độ dẹt của ô mới (giữ nguyên góc nhìn của bộ art)
+OUT_R = 82.0       # bán kính ngoại tiếp mặt trên ô mới (mặt rộng 164 px)
+OUT_D = 30.0       # chiều dày hông đất ô mới
+OUT_CENTER = (100.0, 196.0)
+COS30, SIN30 = 3 ** 0.5 / 2, 0.5
+
+
+def flat_hex(cx, cy, r, sq):
+    import math
+    return [(cx + r * math.cos(math.radians(60 * i)), cy + r * math.sin(math.radians(60 * i)) * sq) for i in range(6)]
+
+
+def src_geom(raw: Image.Image):
+    """Ảnh gốc đã cắt sát: bề rộng = sqrt3*R, đỉnh trên của mặt ở y=0."""
+    a = np.array(raw)[:, :, 3] > 0
+    widths = a.sum(axis=1)
+    y = int(np.argmax(widths))
+    xs = np.nonzero(a[y])[0]
+    w = xs[-1] - xs[0] + 1
+    R = w / 3 ** 0.5
+    return (xs[0] + xs[-1]) / 2.0, R * SRC_SQ, R
+
+
+def poly_mask(size, poly):
+    from PIL import ImageDraw
+    m = Image.new("L", size, 0)
+    ImageDraw.Draw(m).polygon(poly, fill=255)
+    return m
+
+
+def rotated_face(raw: Image.Image) -> Image.Image:
+    """Lấy mặt trên đỉnh nhọn của ảnh gốc, xoay 30° thành mặt đỉnh phẳng trên canvas mới."""
+    cx, cy, R = src_geom(raw)
+    s = R / OUT_R * 0.9   # lấy phần trong của mặt, bỏ viền tối và chỗ bo góc của ảnh gốc
+    X0, Y0 = OUT_CENTER
+    a = s * COS30
+    b = -s * SIN30 / OUT_SQ
+    c = cx - a * X0 - b * Y0
+    d = SRC_SQ * s * SIN30
+    e = SRC_SQ * s * COS30 / OUT_SQ
+    f = cy - d * X0 - e * Y0
+    out = raw.transform((TILE_W, TILE_H), Image.AFFINE, (a, b, c, d, e, f), resample=Image.BICUBIC)
+    mask = poly_mask((TILE_W, TILE_H), flat_hex(X0, Y0, OUT_R, OUT_SQ))
+    # lót màu trung bình bên dưới để không có lỗ ở góc
+    arr = np.array(out)
+    m = (arr[:, :, 3] > 200) & (np.array(mask) > 0)
+    avg = tuple(int(v) for v in arr[m][:, :3].mean(axis=0)) if m.any() else (100, 140, 60)
+    base = Image.new("RGBA", (TILE_W, TILE_H), avg + (255,))
+    base.alpha_composite(out)
+    base.putalpha(mask)
+    return base
+
+
+def side_strip(raw: Image.Image) -> Image.Image:
+    """Dải đất bên hông (mặt hông dưới-trái của ảnh gốc) kéo thẳng thành hình chữ nhật."""
+    cx, cy, R = src_geom(raw)
+    x0 = cx - R * COS30
+    A = (x0, cy + R * 0.5 * SRC_SQ)          # đỉnh dưới-trái của mặt
+    B = (cx, cy + R * SRC_SQ)                # đỉnh dưới của mặt
+    D = raw.height - (cy + R * SRC_SQ)       # bề dày hông trong ảnh gốc
+    L = int(((B[0] - A[0]) ** 2 + (B[1] - A[1]) ** 2) ** 0.5)
+    quad = (A[0], A[1] - 3, A[0], A[1] + D - 2, B[0], B[1] + D - 2, B[0], B[1] - 3)
+    return raw.transform((L, int(D)), Image.QUAD, quad, resample=Image.BICUBIC)
+
+
+def warp_strip(canvas: Image.Image, strip: Image.Image, P0, P1, depth, shade=1.0):
+    """Dán dải đất vào hình bình hành P0-P1 kéo xuống depth px."""
+    ux, uy = P1[0] - P0[0], P1[1] - P0[1]
+    vx, vy = 0.0, depth
+    det = ux * vy - uy * vx
+    # (s,t) = M^-1 (x - P0); strip_x = Ls*s, strip_y = Ds*t
+    Ls, Ds = strip.width, strip.height
+    i11, i12, i21, i22 = vy / det, -vx / det, -uy / det, ux / det
+    a, b = Ls * i11, Ls * i12
+    c = -(a * P0[0] + b * P0[1])
+    d, e = Ds * i21, Ds * i22
+    f = -(d * P0[0] + e * P0[1])
+    out = strip.transform(canvas.size, Image.AFFINE, (a, b, c, d, e, f), resample=Image.BICUBIC)
+    if shade != 1.0:
+        out = recolor(out, (shade, shade, shade))
+    poly = [P0, P1, (P1[0], P1[1] + depth), (P0[0], P0[1] + depth)]
+    m = np.array(poly_mask(canvas.size, poly))
+    al = np.minimum(np.array(out.getchannel("A")), m)
+    out.putalpha(Image.fromarray(al))
+    canvas.alpha_composite(out)
+
+
+def flat_tile(face: Image.Image, strip: Image.Image) -> Image.Image:
+    X0, Y0 = OUT_CENTER
+    hexp = flat_hex(X0, Y0, OUT_R, OUT_SQ)
+    canvas = Image.new("RGBA", (TILE_W, TILE_H), (0, 0, 0, 0))
+    # 3 mặt hông nhìn thấy: phải->dưới-phải, dưới-phải->dưới-trái, dưới-trái->trái
+    warp_strip(canvas, strip, hexp[0], hexp[1], OUT_D, 0.92)
+    warp_strip(canvas, strip, hexp[1], hexp[2], OUT_D, 1.0)
+    warp_strip(canvas, strip, hexp[2], hexp[3], OUT_D, 0.8)
+    canvas.alpha_composite(face)
+    # viền tối mảnh quanh mặt trên cho giống nét vẽ gốc
+    from PIL import ImageDraw
+    d = ImageDraw.Draw(canvas)
+    d.line(hexp + [hexp[0]], fill=(40, 30, 22, 150), width=2)
+    return canvas
+
+
+def texture_face(patch: Image.Image, rim: Image.Image = None) -> Image.Image:
+    """Lát kín mặt lục giác bằng một mảnh texture (dùng cho ruộng lúa)."""
+    X0, Y0 = OUT_CENTER
+    tex = Image.new("RGBA", (TILE_W, TILE_H), (0, 0, 0, 0))
+    for y in range(0, TILE_H, patch.height):
+        for x in range(0, TILE_W, patch.width):
+            tex.alpha_composite(patch, (x, y))
+    mask = np.array(poly_mask((TILE_W, TILE_H), flat_hex(X0, Y0, OUT_R - 8, OUT_SQ)))
+    t = np.array(tex)
+    t[:, :, 3] = np.minimum(t[:, :, 3], mask)
+    face = Image.new("RGBA", (TILE_W, TILE_H), (0, 0, 0, 0))
+    if rim is not None:
+        face.alpha_composite(rim)
+    face.alpha_composite(Image.fromarray(t, "RGBA"))
+    return face
+
+
+def object_mask(raw: Image.Image, kind: str) -> Image.Image:
+    """Tách vật nổi (núi) khỏi nền cỏ của ô gốc theo màu: giữ phần xám/trắng/tối, bỏ cỏ xanh-vàng."""
+    a = np.array(raw).astype(int)
+    r, g, b = a[:, :, 0], a[:, :, 1], a[:, :, 2]
+    mx, mn = np.maximum(np.maximum(r, g), b), np.minimum(np.minimum(r, g), b)
+    sat = (mx - mn) / np.maximum(mx, 1)
+    grassy = (g > r * 0.95) & (g > b * 1.25) & (sat > 0.25)
+    keep = (a[:, :, 3] > 0) & ~grassy
+    cx, cy, R = src_geom(raw)
+    yy = np.arange(a.shape[0])[:, None]
+    keep &= yy < cy + R * SRC_SQ * 0.75   # bỏ phần hông đất
+    keep = ndimage.binary_opening(keep, iterations=1)
+    lab, n = ndimage.label(keep)
+    if n:
+        sizes = ndimage.sum(keep, lab, range(1, n + 1))
+        keep = lab == 1 + int(np.argmax(sizes))
+        keep = ndimage.binary_closing(keep, iterations=2)
+        keep = ndimage.binary_fill_holes(keep)
+    out = a.copy().astype(np.uint8)
+    out[:, :, 3] = np.where(keep, a[:, :, 3], 0).astype(np.uint8)
+    return trim(Image.fromarray(out, "RGBA"))
+
+
 def main():
     if not os.path.exists(SHEET):
         sys.exit("Không thấy " + SHEET)
@@ -257,119 +406,67 @@ def main():
         props[name] = p
         p.save(os.path.join(OUT_PROPS, name + ".png"))
 
-    # ---------- ô gốc ----------
+    # ---------- ô gốc (đỉnh nhọn) ----------
     prism_cut = extract_tiles(sheet)
     raw = {}
     for name, box in TILE_BOXES.items():
-        if name in ("forest", "mountain", "rocks"):
-            raw[name] = prism_cut[name]          # ô có vật nhô cao: tách bằng lăng trụ
-        else:
-            raw[name] = keep_at(remove_bg(sheet.crop(box)), (0.5, 0.62))
-    face_w = 164.0
-    global FLAT_RATIO
-    _, dcy, dw = face_anchor(raw["dirt"])
-    FLAT_RATIO = dcy / dw
-    flat_names = ("grass",)
-    tiles = {name: place_tile(img, face_w, name in flat_names) for name, img in raw.items()}
-    # Ô phẳng: cắt theo đúng hình khối của ô "dirt" để bỏ mẩu ô bên cạnh dính vào
-    sil = np.array(tiles["dirt"])[:, :, 3] > 0
-    sil = ndimage.binary_erosion(sil, iterations=1)
-    for name in ("grass", "grass_flowers", "grass_tall", "field", "water"):
-        a = np.array(tiles[name])
-        a[:, :, 3] = np.where(sil, a[:, :, 3], 0)
-        # cắt đáy: mặt trên cao ~130px + hông ~36px tính từ mép trên của ô
-        ys = np.nonzero(a[:, :, 3] > 0)[0]
-        a[int(ys.min()) + 168:, :, 3] = 0
-        # bỏ mẩu nhỏ dính mép (vd ngọn cây của ô bên dưới)
-        m = a[:, :, 3] > 0
-        lab, n = ndimage.label(ndimage.binary_erosion(m, iterations=3))
-        if n > 1:
-            sizes = ndimage.sum(m, lab, range(1, n + 1))
-            main = ndimage.binary_dilation(lab == 1 + int(np.argmax(sizes)), iterations=5) & m
-            a[:, :, 3] = np.where(main, a[:, :, 3], 0)
-        # xoá các hàng hẹp ở đáy (ngọn cây ô dưới lọt vào)
-        m = a[:, :, 3] > 0
-        widths = m.sum(axis=1)
-        y = m.shape[0] - 1
-        while y > 0 and widths[y] < 0.3 * widths.max():
-            a[y, :, 3] = 0
-            y -= 1
-        tiles[name] = Image.fromarray(a, "RGBA")
+        raw[name] = prism_cut[name] if name in ("forest", "mountain", "rocks") \
+            else keep_at(remove_bg(sheet.crop(box)), (0.5, 0.62))
 
-    # ---------- asset tự tạo (ghép + đổi màu) ----------
-    A = ANCHOR
-    # Làng: nền hoa + nhà đỏ + giếng + chợ nhỏ
-    v = tiles["grass_flowers"].copy()
-    paste_prop(v, props["market"], (A[0] + 44, A[1] + 4), 58)
-    paste_prop(v, props["house_red"], (A[0] - 18, A[1] + 2), 82)
-    paste_prop(v, props["well"], (A[0] + 30, A[1] + 34), 44)
-    tiles["village"] = v
+    # vật nổi lấy từ ô gốc
+    props["mountain_peaks"] = object_mask(raw["mountain"], "mountain")
+    props["mountain_peaks"].save(os.path.join(OUT_PROPS, "mountain_peaks.png"))
 
-    # Đồn thổ phỉ: nền đất + cờ đỏ + thùng + gỗ, ám đỏ
-    camp = recolor(tiles["dirt"], (1.05, 0.9, 0.85))
-    paste_prop(camp, props["log"], (A[0] - 40, A[1] + 28), 30)
-    paste_prop(camp, props["crate"], (A[0] + 34, A[1] + 26), 40)
-    paste_prop(camp, props["banner"], (A[0] - 6, A[1] + 12), 92)
-    paste_prop(camp, props["crate"], (A[0] + 50, A[1] + 6), 30)
-    tiles["camp"] = camp
+    # ---------- ô nền đỉnh phẳng ----------
+    strips = {n: side_strip(raw[n]) for n in ("grass", "grass_flowers", "grass_tall", "dirt", "water")}
+    tiles = {}
+    for n in ("grass", "grass_flowers", "grass_tall", "dirt", "water"):
+        tiles[n] = flat_tile(rotated_face(raw[n]), strips[n])
+    # nền cỏ úa cho đá/núi (giống ô gốc)
+    olive_face = recolor(rotated_face(raw["grass_tall"]), (1.0, 0.92, 0.62), sat=0.7)
+    olive = flat_tile(olive_face, strips["grass_tall"])
+    # ruộng: lát texture lúa lên nền cỏ
+    patch = raw["field"].convert("RGBA").crop((96, 32, 150, 60))
+    field_face = texture_face(patch, rotated_face(raw["grass_tall"]))
+    tiles["field"] = flat_tile(field_face, strips["grass_tall"])
 
-    # Rừng mùa thu (biến thể), rừng thông dày
-    tiles["forest_small"] = tiles["forest"]
-    fd = tiles["grass_tall"].copy()
-    for dx, dy, h in [(-46, -6, 70), (-6, -22, 78), (34, -4, 72), (-24, 24, 70), (22, 28, 74)]:
-        paste_prop(fd, props["pine" if (dx + dy) % 2 == 0 else "pine2"], (A[0] + dx, A[1] + dy), h)
-    tiles["forest"] = fd
-    tiles["forest_autumn"] = recolor(fd, (1.35, 0.95, 0.55), sat=1.15)
+    X0, Y0 = OUT_CENTER
+    A = (X0, Y0)
 
-    # Mỏ đá có cột gỗ + thùng (cho ô đá đã có thợ)
-    q = tiles["rocks"].copy()
-    paste_prop(q, props["crate"], (A[0] + 50, A[1] + 30), 30)
-    paste_prop(q, props["log"], (A[0] - 52, A[1] + 30), 24)
-    tiles["quarry"] = q
+    def deco(base, items):
+        img = base.copy()
+        for name, dx, dy, h in sorted(items, key=lambda it: it[2]):
+            paste_prop(img, props[name], (A[0] + dx, A[1] + dy), h)
+        return img
 
-    # Ruộng có cối xay gió (khi đã lắp máy)
-    fm = tiles["field"].copy()
-    paste_prop(fm, props["windmill"], (A[0] - 40, A[1] + 6), 82)
-    tiles["field_mill"] = fm
-
-    # Hồ có bến thuyền
-    wd = tiles["water"].copy()
-    paste_prop(wd, props["dock_boat"], (A[0] + 26, A[1] + 44), 54)
-    tiles["water_dock"] = wd
-
-    # Sương mù: ô cỏ tối, nhạt màu
+    tiles["field"] = deco(tiles["field"], [("fence", 30, 40, 26), ("hay", -46, 10, 24)])
+    tiles["forest"] = deco(tiles["grass_tall"], [("pine", -44, -8, 66), ("pine2", -4, -26, 72), ("pine", 38, -10, 68),
+                                                 ("pine2", -24, 18, 70), ("pine", 22, 22, 72)])
+    tiles["forest_small"] = deco(tiles["grass_flowers"], [("tree_round", -34, -6, 60), ("pine", 10, -20, 64),
+                                                          ("tree_round2", 30, 16, 58), ("pine2", -12, 22, 62)])
+    tiles["forest_autumn"] = recolor(tiles["forest"], (1.35, 0.95, 0.55), sat=1.15)
+    tiles["rocks"] = deco(olive, [("rock_b", -30, 4, 40), ("rock_a", 14, -10, 52), ("rock_c", 30, 24, 38)])
+    tiles["mountain"] = deco(olive, [("mountain_peaks", 0, 30, 100)])
+    tiles["mountain_snow"] = recolor(tiles["mountain"], (1.08, 1.1, 1.18), sat=0.6, bright=1.1)
+    tiles["village"] = deco(tiles["grass_flowers"], [("house_red", -22, 6, 80), ("market", 42, 4, 56),
+                                                     ("well", 22, 34, 40), ("flowers_white", -48, 30, 18)])
+    camp_base = recolor(tiles["dirt"], (1.05, 0.9, 0.85))
+    tiles["camp"] = deco(camp_base, [("log", -40, 28, 28), ("banner", -6, 12, 90), ("crate", 46, 8, 30),
+                                     ("crate", 32, 30, 38)])
+    tiles["quarry"] = deco(tiles["rocks"], [("crate", 52, 30, 28), ("log", -54, 32, 22)])
+    tiles["field_mill"] = deco(tiles["field"], [("windmill", -40, 4, 80)])
+    tiles["water_dock"] = deco(tiles["water"], [("dock_boat", 28, 44, 52)])
     tiles["fog"] = recolor(tiles["grass"], (0.32, 0.36, 0.42), sat=0.2)
-
-    # Đất hoang hậu tận thế & đất nhiễm độc (chuẩn bị cho thời kỳ sau)
     tiles["wasteland"] = recolor(tiles["dirt"], (0.75, 0.7, 0.68), sat=0.45)
     tiles["toxic"] = recolor(tiles["grass_tall"], (0.7, 1.0, 0.55), sat=1.4, bright=0.85)
-    # Ô tinh thể (mỏ tinh thể ở tầng sâu)
     cr = recolor(tiles["rocks"], (0.75, 0.8, 1.0), sat=0.8)
-    paste_prop(cr, props["crystal"], (A[0] - 8, A[1] + 22), 70)
-    tiles["crystal"] = cr
-    # Đỉnh tuyết (núi cao)
-    tiles["mountain_snow"] = recolor(tiles["mountain"], (1.08, 1.1, 1.18), sat=0.6, bright=1.1)
+    tiles["crystal"] = deco(cr, [("crystal", -6, 24, 68)])
 
     for name, img in tiles.items():
         img.save(os.path.join(OUT_TILES, name + ".png"))
 
-    # Đo mặt trên thật của ô dirt: mặt đất sáng, phần hông tối hơn hẳn.
-    d = np.array(tiles["dirt"]).astype(int)
-    ys = np.nonzero(d[:, 100, 3] > 0)[0]
-    top, bottom = int(ys.min()), int(ys.max())
-    bright = d[:, 100, :3].sum(axis=1) / 3
-    face_bottom = top + 20
-    for y in range(top + 20, bottom):
-        if bright[y] < 110 and bright[y + 2] < 110:
-            face_bottom = y
-            break
-    face_h = face_bottom - top
-    center_y = top + face_h / 2.0
-    squash = face_h / (face_w * 3 ** 0.5 / 2)
-    depth = bottom - face_bottom
-    print("face_w", face_w, "face_h", face_h, "center_y", center_y, "squash", round(squash, 3), "depth", depth)
-    meta = {"canvas": [TILE_W, TILE_H], "face_center": [ANCHOR[0], center_y], "face_w": face_w,
-            "face_h": face_h, "squash": round(squash, 3), "depth": depth,
+    meta = {"canvas": [TILE_W, TILE_H], "face_center": list(OUT_CENTER), "face_w": OUT_R * 2,
+            "squash": OUT_SQ, "depth": OUT_D, "orientation": "flat-top",
             "tiles": sorted(tiles.keys()), "props": sorted(props.keys())}
     with open(os.path.join(OUT_TILES, "meta.json"), "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=1)

@@ -118,8 +118,8 @@ func _tap(screen_pos: Vector2) -> void:
 
 # ---------------------------------------------------------------- vẽ
 func _tile_center(t: Dictionary) -> Vector2:
-	var elev := int(t["elev"]) if t["revealed"] else 0
-	return Hex.to_pixel(int(t["q"]), int(t["r"])) + Vector2(0, -elev * Hex.ELEV_PX)
+	## Mọi ô vẽ cùng một mặt phẳng; độ cao chỉ là chỉ số gameplay (hiện bằng huy hiệu nhỏ).
+	return Hex.to_pixel(int(t["q"]), int(t["r"]))
 
 
 func _hash(t: Dictionary) -> int:
@@ -207,20 +207,19 @@ func _draw_tile(key: String, t: Dictionary) -> void:
 
 	if art.has_tile(_sprite_name(t)):
 		# Ô được nâng cao: vẽ thêm cột đất phía dưới phần đất có sẵn trong ảnh.
-		if elev > 0:
-			var base_top := Hex.corners(c + Vector2(0, art.side_depth(Hex.SIZE) - 2.0))
-			_draw_sides(base_top, elev * Hex.ELEV_PX + 2.0, Color("5c3f27") * mod)
 		art.draw_tile(self, _sprite_name(t), c, Hex.SIZE, mod)
 	else:
 		var col: Color = Data.TILES[type]["color"]
 		if not t["owned"]:
 			col = col.darkened(0.35)
-		_draw_sides(top, elev * Hex.ELEV_PX + 8.0, col.darkened(0.45))
+		_draw_sides(top, 8.0, col.darkened(0.45))
 		draw_colored_polygon(top, col)
 		draw_polyline(outline, col.darkened(0.3), 2.0)
 		_draw_decor(type, c, t)
 
 	_draw_buildings(t, c)
+	if elev > 0 and type != "camp":
+		_draw_elev_badge(c + Vector2(Hex.SIZE * 0.62, -Hex.SIZE * 0.3), elev, t["crane"])
 
 	if type == "camp":
 		var idx := int(t["camp"])
@@ -241,6 +240,16 @@ func _draw_tile(key: String, t: Dictionary) -> void:
 		draw_arc(c + Vector2(0, -40), 13, 0, TAU, 24, Color(0, 0, 0, 0.5), 6.0)
 		draw_arc(c + Vector2(0, -40), 13, -PI / 2, -PI / 2 + TAU * p, 24, Color(1, 0.9, 0.4), 4.0)
 
+
+
+func _draw_elev_badge(p: Vector2, elev: int, has_crane: bool) -> void:
+	## Huy hiệu độ cao: 1-2 hình núi nhỏ; có cần cẩu thì viền xanh.
+	var ring := Color("7fd36a") if has_crane else Color(0, 0, 0, 0.55)
+	draw_circle(p, 10.0, Color(0.1, 0.09, 0.07, 0.75))
+	draw_arc(p, 10.0, 0, TAU, 20, ring, 1.5)
+	for i in elev:
+		var o := Vector2((i - (elev - 1) / 2.0) * 7.0, 3.0)
+		draw_colored_polygon(PackedVector2Array([p + o + Vector2(-5, 0), p + o + Vector2(5, 0), p + o + Vector2(0, -9)]), Color("d8d2c2"))
 
 
 func _draw_buildings(t: Dictionary, c: Vector2) -> void:

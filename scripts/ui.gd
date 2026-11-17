@@ -375,7 +375,7 @@ func _build_map_tab() -> void:
 		title_txt = Data.camp_name(int(t["camp"]))
 	_title(title_txt + ("" if t["owned"] or type == "camp" else "  (ngoài lãnh thổ)"))
 	if int(t["elev"]) > 0:
-		_label("Độ cao: %d bậc. Khuân vác đi chậm hơn nếu không có cần cẩu." % int(t["elev"]))
+		_label("Địa hình dốc: %d bậc (biểu tượng núi nhỏ trên ô). Khuân vác đi chậm hơn nếu không có cần cẩu." % int(t["elev"]))
 	match type:
 		"camp":
 			_build_camp(key, t)

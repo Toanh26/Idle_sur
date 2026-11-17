@@ -61,7 +61,7 @@ PROP_BOXES = {
     "lantern": (824, 847, 907, 993),
     "signpost": (645, 868, 809, 991),
     "log": (525, 838, 640, 910),
-    "fence": (456, 917, 639, 988),
+    "fence": (456, 917, 572, 988),
     "hay": (366, 914, 450, 991),
     "bush_flower": (21, 906, 137, 992),
     "bush_flower2": (143, 905, 265, 993),
@@ -336,20 +336,109 @@ def warp_strip(canvas: Image.Image, strip: Image.Image, P0, P1, depth, shade=1.0
     canvas.alpha_composite(out)
 
 
+def side_band(strip: Image.Image) -> Image.Image:
+    """Dải đất liền mạch dưới mép trước của mặt lục giác (3 mặt hông dưới-trái, dưới, dưới-phải).
+    Texture lấy theo cột từ dải đất của ảnh gốc nên không bị gãy ở góc."""
+    import math
+    X0, Y0 = OUT_CENTER
+    R, D = OUT_R, OUT_D
+    h = R * math.sqrt(3) / 2 * OUT_SQ
+    st = np.array(strip.convert("RGBA")).astype(float)
+    # bỏ hai đầu dải (hay dính viền trong suốt)
+    w0 = st.shape[1]
+    st = st[:, int(w0 * 0.12):int(w0 * 0.88)]
+    sh, sw = st.shape[0], st.shape[1]
+    out = np.zeros((TILE_H, TILE_W, 4), dtype=float)
+    x_min, x_max = int(math.floor(X0 - R)), int(math.ceil(X0 + R))
+    for x in range(x_min, x_max + 1):
+        if x < X0 - R / 2:
+            ytop = Y0 + (x - (X0 - R)) / (R / 2) * h
+            shade = 0.78
+        elif x <= X0 + R / 2:
+            ytop = Y0 + h
+            shade = 1.0
+        else:
+            ytop = Y0 + ((X0 + R) - x) / (R / 2) * h
+            shade = 0.9
+        sx = int((x - x_min) * 0.85) % sw
+        for y in range(int(ytop) - 2, int(ytop + D) + 1):
+            if not (0 <= y < TILE_H and 0 <= x < TILE_W):
+                continue
+            t = (y - ytop) / D
+            if t > 1.0:
+                continue
+            sy = min(sh - 1, max(0, int(t * (sh - 1))))
+            px = st[sy, sx]
+            out[y, x, :3] = px[:3] * shade
+            out[y, x, 3] = 255 if px[3] > 20 else 0
+    # mép dưới tối để khối rõ hơn
+    img = Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGBA")
+    return img
+
+
 def flat_tile(face: Image.Image, strip: Image.Image) -> Image.Image:
     X0, Y0 = OUT_CENTER
     hexp = flat_hex(X0, Y0, OUT_R, OUT_SQ)
     canvas = Image.new("RGBA", (TILE_W, TILE_H), (0, 0, 0, 0))
-    # 3 mặt hông nhìn thấy: phải->dưới-phải, dưới-phải->dưới-trái, dưới-trái->trái
-    warp_strip(canvas, strip, hexp[0], hexp[1], OUT_D, 0.92)
-    warp_strip(canvas, strip, hexp[1], hexp[2], OUT_D, 1.0)
-    warp_strip(canvas, strip, hexp[2], hexp[3], OUT_D, 0.8)
+    canvas.alpha_composite(side_band(strip))
     canvas.alpha_composite(face)
-    # viền tối mảnh quanh mặt trên cho giống nét vẽ gốc
     from PIL import ImageDraw
     d = ImageDraw.Draw(canvas)
-    d.line(hexp + [hexp[0]], fill=(40, 30, 22, 150), width=2)
+    # viền tối mảnh quanh mặt trên và mép dưới của hông
+    d.line(hexp + [hexp[0]], fill=(40, 30, 22, 140), width=2)
+    bottom = [hexp[0], hexp[1], hexp[2], hexp[3]]
+    d.line([(x, y + OUT_D) for x, y in bottom], fill=(35, 25, 18, 160), width=2)
+    for v in (hexp[0], hexp[1], hexp[2], hexp[3]):
+        d.line([v, (v[0], v[1] + OUT_D)], fill=(35, 25, 18, 90), width=1)
     return canvas
+
+
+def farm_face(base_face: Image.Image) -> Image.Image:
+    """Mặt ruộng vẽ lại liền mạch: thửa lúa phủ gần kín mặt ô, chia 3 thửa bằng lối cỏ, có luống và viền
+    (bảng màu lấy từ ô ruộng gốc). Vẽ ở góc nhìn thẳng rồi ép theo độ dẹt của ô."""
+    import math
+    rng = np.random.default_rng(7)
+    X0, Y0 = OUT_CENTER
+    up = 4
+    R = OUT_R * up
+    Htd = R * math.sqrt(3)
+    W, H = int(2 * R) + 8, int(Htd) + 8
+    cx, cy = W / 2, H / 2
+    yy, xx = np.mgrid[0:H, 0:W]
+    u, v = xx - cx, yy - cy
+    # lục giác đỉnh phẳng thu nhỏ 84%
+    r_in = R * 0.84
+    inside = (np.abs(v) <= r_in * math.sqrt(3) / 2) & (np.abs(u) * math.sqrt(3) + np.abs(v) <= r_in * math.sqrt(3))
+    path_w = 0.045 * Htd
+    paths = (np.abs(v - 0.02 * Htd) < path_w) | ((np.abs(u - 0.12 * R) < path_w) & (v < 0.02 * Htd))
+    wheat = inside & ~paths
+    gold = np.array([232, 170, 52], float)
+    rowcol = [np.array([249, 191, 53], float), np.array([206, 142, 40], float)]
+    img = np.zeros((H, W, 4), float)
+    band = ((v / (6 * up)).astype(int) % 2).astype(int)
+    img[:, :, :3] = gold
+    for k in (0, 1):
+        sel = band == k
+        img[sel, :3] = rowcol[k] * 0.6 + gold * 0.4
+    noise = rng.normal(0, 10, (H, W))
+    img[:, :, :3] += noise[:, :, None]
+    # bông lúa sáng lấm tấm
+    for _ in range(900):
+        px, py = int(rng.uniform(0, W)), int(rng.uniform(0, H))
+        img[max(0, py - 1):py + 2, max(0, px - 3):px + 4, :3] = (253, 216, 96)
+    # viền thửa
+    er = ndimage.binary_erosion(wheat, iterations=3 * up)
+    border = wheat & ~er
+    img[border, :3] = (150, 96, 30)
+    img[:, :, 3] = np.where(wheat, 255, 0)
+    td = Image.fromarray(np.clip(img, 0, 255).astype(np.uint8), "RGBA")
+    td = td.resize((int(W / up), max(1, int(H / up * OUT_SQ))), Image.LANCZOS)
+    face = base_face.copy()
+    face.alpha_composite(td, (int(round(X0 - td.width / 2)), int(round(Y0 - td.height / 2))))
+    mask = poly_mask((TILE_W, TILE_H), flat_hex(X0, Y0, OUT_R, OUT_SQ))
+    al = np.minimum(np.array(face.getchannel("A")), np.array(mask))
+    face.putalpha(Image.fromarray(al))
+    return face
 
 
 def texture_face(patch: Image.Image, rim: Image.Image = None) -> Image.Image:
@@ -426,9 +515,7 @@ def main():
     olive_face = recolor(rotated_face(raw["grass_tall"]), (1.0, 0.92, 0.62), sat=0.7)
     olive = flat_tile(olive_face, strips["grass_tall"])
     # ruộng: lát texture lúa lên nền cỏ
-    patch = raw["field"].convert("RGBA").crop((96, 32, 150, 60))
-    field_face = texture_face(patch, rotated_face(raw["grass_tall"]))
-    tiles["field"] = flat_tile(field_face, strips["grass_tall"])
+    tiles["field"] = flat_tile(farm_face(rotated_face(raw["grass_tall"])), strips["grass_tall"])
 
     X0, Y0 = OUT_CENTER
     A = (X0, Y0)
@@ -439,7 +526,7 @@ def main():
             paste_prop(img, props[name], (A[0] + dx, A[1] + dy), h)
         return img
 
-    tiles["field"] = deco(tiles["field"], [("fence", 30, 40, 26), ("hay", -46, 10, 24)])
+    tiles["field"] = deco(tiles["field"], [("hay", 50, -18, 20), ("fence", -30, 46, 20), ("fence", 30, 46, 20)])
     tiles["forest"] = deco(tiles["grass_tall"], [("pine", -44, -8, 66), ("pine2", -4, -26, 72), ("pine", 38, -10, 68),
                                                  ("pine2", -24, 18, 70), ("pine", 22, 22, 72)])
     tiles["forest_small"] = deco(tiles["grass_flowers"], [("tree_round", -34, -6, 60), ("pine", 10, -20, 64),

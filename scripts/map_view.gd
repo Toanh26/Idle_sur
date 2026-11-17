@@ -232,11 +232,6 @@ func _draw_tile(key: String, t: Dictionary) -> void:
 		draw_rect(tag, Color(0, 0, 0, 0.55))
 		draw_string(_font, Vector2(tag.position.x, tag.position.y + 14), "%d" % int(stock), HORIZONTAL_ALIGNMENT_CENTER, 36, 14, col_s)
 
-	# Thao tác tay đang chạy
-	var p := Game.manual_progress(key)
-	if p > 0.0:
-		draw_arc(c + Vector2(0, -40), 13, 0, TAU, 24, Color(0, 0, 0, 0.5), 6.0)
-		draw_arc(c + Vector2(0, -40), 13, -PI / 2, -PI / 2 + TAU * p, 24, Color(1, 0.9, 0.4), 4.0)
 
 
 

@@ -142,7 +142,7 @@ func _process(delta: float) -> void:
 		_acc -= Data.TICK
 		steps += 1
 		simulate(Data.TICK, false)
-		_tick_manual(Data.TICK)
+	_tick_manual(delta * world_speed)  # chạy theo từng khung hình cho thanh tiến độ mượt
 	_check_levels()
 	_save_acc += delta
 	if _save_acc >= Data.AUTOSAVE_SEC:
@@ -742,9 +742,6 @@ func load_game() -> bool:
 	play_time = float(d.get("play", 0.0))
 	manual = {}
 	_build_draw_order()
-	var elapsed := Time.get_unix_time_from_system() - float(d.get("time", Time.get_unix_time_from_system()))
-	if elapsed > 60.0:
-		_run_offline(elapsed)
 	return true
 
 
@@ -794,16 +791,7 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		save_game()
 	elif what == NOTIFICATION_APPLICATION_PAUSED:
-		save_game()
-		_paused_at = Time.get_unix_time_from_system()
-	elif what == NOTIFICATION_APPLICATION_RESUMED:
-		if _paused_at > 0.0:
-			var elapsed := Time.get_unix_time_from_system() - _paused_at
-			_paused_at = 0.0
-			if elapsed > 60.0:
-				_run_offline(elapsed)
-				offline_ready.emit()
-				structure_changed.emit()
+		save_game()  # game chỉ chạy khi đang mở; quay lại thì chạy tiếp từ chỗ cũ
 
 
 func reset_game() -> void:

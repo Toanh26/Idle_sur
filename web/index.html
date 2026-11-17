@@ -48,7 +48,8 @@
   .row > .narrow { flex: 0 0 52px; }
   .col { display: flex; flex-direction: column; gap: 6px; margin: 5px 0; }
   .bar { height: 12px; background: rgba(0,0,0,0.45); border-radius: 6px; overflow: hidden; margin: 5px 0; }
-  .bar > div { height: 100%; background: #d9a43a; width: 0; }
+  .bar > div { height: 100%; width: 100%; background: linear-gradient(90deg, #c98f2a, #f2c45a); transform: scaleX(0);
+    transform-origin: left center; will-change: transform; }
   hr { border: none; border-top: 1px solid rgba(255,255,255,0.15); margin: 8px 0; }
   .check { display: flex; align-items: center; gap: 8px; font-size: 14px; margin: 6px 0; }
   .check input { width: 22px; height: 22px; }

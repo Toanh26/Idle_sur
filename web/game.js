@@ -534,25 +534,6 @@ function fmtDuration(s) {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
   return h > 0 ? `${h} giờ ${m} phút` : `${m} phút`;
 }
-function runOffline(elapsed) {
-  const secs = Math.min(elapsed, D.OFFLINE_CAP);
-  const before = Object.assign({}, G.res);
-  let rem = secs;
-  while (rem > 0) { const st = Math.min(D.OFFLINE_STEP, rem); simulate(st, true); rem -= st; }
-  const lines = [`Bạn đã vắng mặt ${fmtDuration(elapsed)}${elapsed > D.OFFLINE_CAP ? " (tính tối đa 12 giờ)" : ""}.`];
-  const gains = D.RES_ORDER.map((id) => [id, G.res[id] - before[id]]).filter(([, g]) => Math.abs(g) >= 1)
-    .map(([id, g]) => `${g > 0 ? "+" : ""}${Math.floor(g)} ${D.RES[id].name}`);
-  lines.push("Thu được: " + (gains.length ? gains.join(", ") : "không có gì (chưa có thợ hoặc máy)."));
-  const hints = [];
-  const full = Object.values(G.tiles).find((t) => t.owned && t.stock >= D.STOCK_CAP * 0.95);
-  if (full) hints.push(`Bãi chứa ở ${D.TILES[full.type].name} đầy: cần thêm khuân vác hoặc cần cẩu.`);
-  const fullRes = ["lua", "go", "da"].find((id) => G.res[id] >= cap() - 0.5);
-  if (fullRes) hints.push(`Kho ${D.RES[fullRes].name} đã đầy: nâng cấp kho.`);
-  if (G.starving) hints.push("Hết lúa: thợ làm việc rất chậm. Cần thêm ruộng hoặc thợ trồng lúa.");
-  if (hints.length) lines.push("Nút thắt: " + hints.join(" "));
-  G.offlineReport = lines.join("\n");
-  addLog(`Thu hoạch AFK sau ${fmtDuration(elapsed)}.`);
-}
 function resetGame() {
   try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* bỏ qua */ }
   newGame();
@@ -690,13 +671,7 @@ function drawTile(ctx, key, t) {
     ctx.fillStyle = full ? "#ff7359" : "#fff7cc";
     ctx.fillText(String(Math.floor(t.stock)), x, y + 23.5);
   }
-  const p = manualProgress(key);
-  if (p > 0) {
-    ctx.lineWidth = 6; ctx.strokeStyle = "rgba(0,0,0,0.5)";
-    ctx.beginPath(); ctx.arc(x, y - 40, 13, 0, Math.PI * 2); ctx.stroke();
-    ctx.lineWidth = 4; ctx.strokeStyle = "#ffe066";
-    ctx.beginPath(); ctx.arc(x, y - 40, 13, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p); ctx.stroke();
-  }
+
 }
 function drawBuildings(ctx, t, x, y) {
   if (t.npcs > 0) {
@@ -816,6 +791,7 @@ const panel = $("panel");
 let tab = "map";
 let armyPick = {};
 let live = [];
+let fast = []; // cập nhật mỗi khung hình (thanh tiến độ) cho mượt
 let resetArmed = false;
 
 function fmt(v) {
@@ -852,7 +828,13 @@ function row(parent = panel) { const r = mk("div", "row"); parent.appendChild(r)
 function bar(fn) {
   const b = mk("div", "bar"), f = mk("div");
   b.appendChild(f);
-  live.push(() => (f.style.width = Math.round(fn() * 100) + "%"));
+  let last = -1;
+  fast.push(() => {
+    const v = Math.max(0, Math.min(1, fn()));
+    if (Math.abs(v - last) < 0.0005) return;
+    last = v;
+    f.style.transform = `scaleX(${v})`;
+  });
   panel.appendChild(b);
 }
 function runLive() { for (const f of live) f(); }
@@ -873,6 +855,7 @@ function rebuild() {
   structureDirty = false;
   const scroll = panel.scrollTop;
   live = [];
+  fast = [];
   panel.innerHTML = "";
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   ({ map: buildMapTab, skills: buildSkillsTab, army: buildArmyTab, village: buildVillageTab, settings: buildSettingsTab })[tab]();
@@ -946,7 +929,7 @@ function buildResource(key, t) {
     button(() => `Thuê thợ (${costText(costNpc())})`, () => hireNpc(key), () => canHireNpc(key));
   }
   sub("Máy móc");
-  if (skillLevel(s) < D.MACHINE_UNLOCK) label(`Đạt ${sd.name} cấp ${D.MACHINE_UNLOCK} để lắp máy (tự động hoàn toàn, chạy 100% khi offline).`);
+  if (skillLevel(s) < D.MACHINE_UNLOCK) label(`Đạt ${sd.name} cấp ${D.MACHINE_UNLOCK} để lắp máy (tự động hoàn toàn).`);
   else {
     label(() => `Máy cấp ${t.machine}`);
     button(() => `${t.machine === 0 ? "Lắp máy" : "Nâng cấp máy"} (${costText(costMachine(t))})`, () => buyMachine(key), () => canBuyMachine(key));
@@ -1277,14 +1260,16 @@ $("bclose").addEventListener("click", () => Battle.close());
 // =====================================================================
 //  VÒNG LẶP
 // =====================================================================
-let acc = 0, saveAcc = 0, uiAcc = 0, lastT = performance.now(), hiddenAt = 0;
+let acc = 0, saveAcc = 0, uiAcc = 0, lastT = performance.now();
 function frame(now) {
   const dt = Math.min(0.25, (now - lastT) / 1000);
   lastT = now;
   time += dt;
   acc += dt * G.speed;
   let steps = 0;
-  while (acc >= D.TICK && steps < 400) { acc -= D.TICK; steps++; simulate(D.TICK, false); tickManual(D.TICK); }
+  while (acc >= D.TICK && steps < 400) { acc -= D.TICK; steps++; simulate(D.TICK, false); }
+  tickManual(dt * G.speed);
+  for (const f of fast) f();
   checkLevels();
   saveAcc += dt;
   if (saveAcc >= D.AUTOSAVE_SEC) { saveAcc = 0; saveLocal(); }
@@ -1296,13 +1281,9 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) { saveLocal(true); hiddenAt = Date.now() / 1000; }
-  else if (hiddenAt) {
-    const el = Date.now() / 1000 - hiddenAt;
-    hiddenAt = 0;
-    lastT = performance.now();
-    if (el > 60) { runOffline(el); showPopup("Chào mừng trở lại", G.offlineReport); changed(); }
-  }
+  // Game chỉ chạy khi đang mở: rời app thì lưu và dừng, quay lại thì chạy tiếp từ chỗ cũ.
+  if (document.hidden) saveLocal(true);
+  else lastT = performance.now();
 });
 window.addEventListener("pagehide", () => saveLocal(true));
 window.addEventListener("resize", resize);
@@ -1320,16 +1301,11 @@ async function boot() {
   if (timedOut) Cloud.disabled = true; // đám mây trả lời quá chậm: lần này chỉ lưu trên trình duyệt
   const pickSave = [local, cloud].filter(Boolean).sort((a, b) => (b.time || 0) - (a.time || 0))[0];
   if (!pickSave || !applySave(pickSave)) newGame();
-  else {
-    const el = Date.now() / 1000 - (pickSave.time || Date.now() / 1000);
-    if (el > 60) runOffline(el);
-  }
   D.SKILL_ORDER.forEach((s) => (lastLevels[s] = skillLevel(s)));
   cam.zoom = Math.max(0.6, Math.min(1.3, viewW / 420));
   $("loading").style.display = "none";
   rebuild();
   updateTop();
-  if (G.offlineReport) showPopup("Chào mừng trở lại", G.offlineReport);
   saveLocal(true);
   requestAnimationFrame((t) => { lastT = t; frame(t); });
 }

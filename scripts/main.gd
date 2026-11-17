@@ -22,5 +22,3 @@ func _ready() -> void:
 	ui.setup()
 	map_view.tile_tapped.connect(ui.on_tile_tapped)
 	battle.finished.connect(ui.on_battle_finished)
-	if Game.offline_report != "":
-		ui.show_popup("Chào mừng trở lại", Game.offline_report)

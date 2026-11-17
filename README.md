@@ -42,7 +42,7 @@ Lỗi hay gặp: nút Export bị mờ hoặc báo thiếu template → cài l�
 - **Quân đội**: Dân quân, Cung thủ, Lính khiên nuôi bằng tài nguyên; hàng chờ huấn luyện.
 - **Tấn công đồn địch**: chọn quân → trận tự đánh trên bàn lục giác, chỉ có nút **Rút quân** và tăng tốc. Thắng thì chiếm ô xung quanh, mở sương mù. 8 đồn, đồn cuối là sào huyệt thủ lĩnh.
 - **Phòng thủ**: đợt cướp mỗi 30 phút; xây hàng rào, tháp cung trên đồng cỏ; quân ở nhà góp 50% sức mạnh.
-- **AFK/offline**: tự lưu mỗi 30 giây; mở lại game sẽ tính tối đa 12 giờ vắng mặt (thợ 50%, máy 100%) và báo nút thắt.
+- **Lưu game**: tự lưu mỗi 30 giây và khi thoát. Game chỉ chạy khi đang mở; vào lại thì chạy tiếp từ chỗ cũ (không tính thời gian vắng mặt).
 - **Tab Cài đặt**: lưu ngay, chơi lại từ đầu (có bước xác nhận), tăng tốc thế giới x5/x20, +500 tài nguyên.
 
 Chưa làm (theo lộ trình): thời kỳ 2 trở đi, cáp treo, gương thông, cổng dịch chuyển, nghiên cứu, Tái thiết, Bảo tàng.
@@ -68,7 +68,7 @@ Thiếu ảnh nào thì game tự vẽ hình tạm bằng code.
 | File | Vai trò |
 |---|---|
 | `scripts/data.gd` | Toàn bộ số liệu cân bằng (autoload `Data`) |
-| `scripts/game.gd` | Trạng thái, mô phỏng, lưu/tải, offline (autoload `Game`) |
+| `scripts/game.gd` | Trạng thái, mô phỏng, lưu/tải (autoload `Game`) |
 | `scripts/hex.gd` | Toán lưới lục giác (đỉnh phẳng) |
 | `scripts/tile_art.gd` | Nạp và vẽ ảnh ô / đồ vật |
 | `scripts/map_view.gd` | Vẽ bản đồ, chạm/kéo/thu phóng |

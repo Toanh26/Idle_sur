@@ -23,6 +23,7 @@ var tab := "map"
 var selected := ""
 var army_pick := {}
 var _live: Array = []
+var _fast: Array = []  # cập nhật mỗi khung hình (thanh tiến độ)
 var _refresh_acc := 0.0
 var _rebuild_pending := false
 var _theme: Theme
@@ -42,7 +43,6 @@ func setup() -> void:
 	if battle:
 		battle.set_theme_from(_theme)
 	Game.structure_changed.connect(_request_rebuild)
-	Game.offline_ready.connect(func(): show_popup("Chào mừng trở lại", Game.offline_report))
 	_rebuild()
 
 
@@ -194,6 +194,8 @@ func show_popup(title: String, text: String) -> void:
 #  Cập nhật
 # =====================================================================
 func _process(delta: float) -> void:
+	for f in _fast:
+		f.call()
 	_refresh_acc += delta
 	if _refresh_acc < 0.2:
 		return
@@ -232,6 +234,7 @@ func _request_rebuild() -> void:
 func _rebuild() -> void:
 	_rebuild_pending = false
 	_live.clear()
+	_fast.clear()
 	for c in content.get_children():
 		content.remove_child(c)
 		c.queue_free()
@@ -335,7 +338,8 @@ func _bar(value: Callable) -> ProgressBar:
 	pb.max_value = 1.0
 	pb.show_percentage = false
 	pb.custom_minimum_size = Vector2(0, 18)
-	_live.append(func(): pb.value = value.call())
+	pb.step = 0.0
+	_fast.append(func(): pb.value = value.call())
 	content.add_child(pb)
 	return pb
 
@@ -431,7 +435,7 @@ func _build_resource(key: String, t: Dictionary) -> void:
 	# --- Máy ---
 	_sub("Máy móc")
 	if Game.skill_level(s) < Data.MACHINE_UNLOCK:
-		_label("Đạt %s cấp %d để lắp máy (tự động hoàn toàn, chạy 100%% khi offline)." % [sdef["name"], Data.MACHINE_UNLOCK])
+		_label("Đạt %s cấp %d để lắp máy (tự động hoàn toàn)." % [sdef["name"], Data.MACHINE_UNLOCK])
 	else:
 		_label(func(): return "Máy cấp %d" % int(t["machine"]))
 		_button(func(): return ("Lắp máy" if int(t["machine"]) == 0 else "Nâng cấp máy") + " (%s)" % Game.cost_text(Game.cost_machine(t)),

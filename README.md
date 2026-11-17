@@ -2,7 +2,14 @@
 
 Prototype 2D màn hình dọc làm bằng **Godot 4.3+** (GDScript), theo tài liệu thiết kế "GDD – Game Idle Khai thác, Tự động hóa & Lãnh thổ".
 
-## Chạy thử
+## Bản web (chơi trên điện thoại)
+
+Thư mục `web/` là bản chuyển sang HTML5/JavaScript, cùng luật chơi và cùng bộ ảnh với bản Godot:
+- Chơi ngay: https://claude.ai/artifact/9SZT4WNDkCAPrviJakp7eN (mở bằng trình duyệt điện thoại, đăng nhập claude.ai; save đồng bộ theo tài khoản).
+- Chạy trên máy: `cd web && python3 -m http.server 8000` rồi mở http://localhost:8000. Khi chạy ngoài claude.ai, save lưu trong trình duyệt.
+- Ảnh trong `web/assets/` là bản chép từ `assets/`; chạy lại `tools/slice_assets.py` thì chép lại sang.
+
+## Chạy thử (Godot)
 
 1. Cài Godot 4.3 trở lên (bản Standard, không cần .NET).
 2. Mở Godot → **Import** → chọn file `project.godot` trong thư mục này.

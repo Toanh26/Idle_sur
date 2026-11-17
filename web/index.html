@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Frontier Idle</title>
+<style>
+  :root {
+    --bg: #1d2620;
+    --panel: rgba(33, 28, 23, 0.95);
+    --edge: rgba(140, 107, 61, 0.8);
+    --text: #f3ead8;
+    --gold: #f2c45a;
+    --sub: #e7b86a;
+    --btn: #6b4f2a;
+    --btn-hi: #86643a;
+    --btn-dis: #47443f;
+    --warn: #ffb38a;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+    font-family: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; touch-action: none; }
+  #map { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #top { position: fixed; left: 6px; right: 6px; top: calc(6px + env(safe-area-inset-top)); background: var(--panel);
+    border: 2px solid var(--edge); border-radius: 14px; padding: 6px 8px; z-index: 5; }
+  #res { display: flex; justify-content: space-around; font-weight: 700; font-size: 15px; gap: 4px; }
+  #res span { white-space: nowrap; }
+  #info { text-align: center; font-size: 12px; opacity: 0.9; margin-top: 3px; }
+  #bottom { position: fixed; left: 6px; right: 6px; bottom: calc(6px + env(safe-area-inset-bottom)); z-index: 5;
+    display: flex; flex-direction: column; gap: 6px; }
+  #panel { background: var(--panel); border: 2px solid var(--edge); border-radius: 14px; max-height: 40vh;
+    overflow-y: auto; padding: 10px 12px; touch-action: pan-y; -webkit-overflow-scrolling: touch; }
+  #panel.collapsed { display: none; }
+  #tabs { display: flex; gap: 5px; }
+  #tabs button { flex: 1; font-size: 13px; padding: 10px 2px; }
+  #tabs button.active { background: var(--btn-hi); outline: 2px solid var(--gold); }
+  #toggle { position: absolute; right: 8px; top: -30px; width: 44px; height: 26px; padding: 0; font-size: 14px; border-radius: 8px; }
+  button { background: var(--btn); color: #fff6e0; border: none; border-radius: 10px; padding: 9px 10px;
+    font: inherit; font-size: 14px; cursor: pointer; touch-action: manipulation; }
+  button:active:not(:disabled) { background: #4a361c; }
+  button:disabled { background: var(--btn-dis); color: #9e9a92; }
+  .title { color: var(--gold); font-size: 19px; font-weight: 800; margin: 2px 0 6px; }
+  .sub { color: var(--sub); font-size: 16px; font-weight: 700; margin: 8px 0 4px; }
+  .lbl { font-size: 13.5px; line-height: 1.4; margin: 4px 0; }
+  .warn { color: var(--warn); }
+  .row { display: flex; gap: 6px; align-items: center; margin: 5px 0; }
+  .row > * { flex: 1; }
+  .row > .narrow { flex: 0 0 52px; }
+  .col { display: flex; flex-direction: column; gap: 6px; margin: 5px 0; }
+  .bar { height: 12px; background: rgba(0,0,0,0.45); border-radius: 6px; overflow: hidden; margin: 5px 0; }
+  .bar > div { height: 100%; background: #d9a43a; width: 0; }
+  hr { border: none; border-top: 1px solid rgba(255,255,255,0.15); margin: 8px 0; }
+  .check { display: flex; align-items: center; gap: 8px; font-size: 14px; margin: 6px 0; }
+  .check input { width: 22px; height: 22px; }
+  .log { font-size: 12px; white-space: pre-wrap; opacity: 0.9; }
+  #overlay { position: fixed; inset: 0; z-index: 20; display: none; background: rgba(0,0,0,0.55);
+    align-items: center; justify-content: center; padding: 20px; }
+  #overlay .box { background: var(--panel); border: 2px solid var(--edge); border-radius: 16px; padding: 16px;
+    max-width: 440px; width: 100%; }
+  #overlay .t { color: var(--gold); font-size: 20px; font-weight: 800; text-align: center; margin-bottom: 10px; }
+  #overlay .m { font-size: 14px; white-space: pre-wrap; line-height: 1.45; margin-bottom: 14px; }
+  #overlay button { width: 100%; font-size: 16px; }
+  #battle { position: fixed; inset: 0; z-index: 15; display: none; background: #141813; }
+  #bcanvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #btitle { position: absolute; top: calc(14px + env(safe-area-inset-top)); left: 0; right: 0; text-align: center;
+    font-size: 18px; font-weight: 800; color: var(--text); text-shadow: 0 2px 4px #000; }
+  #bbar { position: absolute; left: 14px; right: 14px; bottom: calc(18px + env(safe-area-inset-bottom)); display: flex; gap: 10px; }
+  #bbar button { font-size: 17px; padding: 14px; }
+  #bbar #bretreat { flex: 1; }
+  #bresult { position: absolute; left: 20px; right: 20px; top: 35%; background: var(--panel); border: 2px solid var(--edge);
+    border-radius: 16px; padding: 18px; text-align: center; display: none; }
+  #bresult .m { font-size: 16px; white-space: pre-wrap; margin-bottom: 14px; }
+  #bresult button { width: 100%; font-size: 16px; }
+  #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 30;
+    background: var(--bg); color: var(--gold); font-size: 18px; font-weight: 700; }
+</style>
+</head>
+<body>
+<canvas id="map"></canvas>
+<div id="top"><div id="res"></div><div id="info"></div></div>
+<div id="bottom">
+  <button id="toggle" title="Thu gọn bảng">▾</button>
+  <div id="panel"></div>
+  <div id="tabs"></div>
+</div>
+<div id="battle">
+  <canvas id="bcanvas"></canvas>
+  <div id="btitle"></div>
+  <div id="bbar"><button id="bretreat">Rút quân</button><button id="bspeed">x1</button></div>
+  <div id="bresult"><div class="m"></div><button id="bclose">Về làng</button></div>
+</div>
+<div id="overlay"><div class="box"><div class="t"></div><div class="m"></div><button>Nhận</button></div></div>
+<div id="loading">Đang tải thung lũng…</div>
+<script src="game.js"></script>
+</body>
+</html>

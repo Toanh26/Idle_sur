@@ -218,8 +218,6 @@ func _draw_tile(key: String, t: Dictionary) -> void:
 		_draw_decor(type, c, t)
 
 	_draw_buildings(t, c)
-	if elev > 0 and type != "camp":
-		_draw_elev_badge(c + Vector2(Hex.SIZE * 0.62, -Hex.SIZE * 0.3), elev, t["crane"])
 
 	if type == "camp":
 		var idx := int(t["camp"])
@@ -240,16 +238,6 @@ func _draw_tile(key: String, t: Dictionary) -> void:
 		draw_arc(c + Vector2(0, -40), 13, 0, TAU, 24, Color(0, 0, 0, 0.5), 6.0)
 		draw_arc(c + Vector2(0, -40), 13, -PI / 2, -PI / 2 + TAU * p, 24, Color(1, 0.9, 0.4), 4.0)
 
-
-
-func _draw_elev_badge(p: Vector2, elev: int, has_crane: bool) -> void:
-	## Huy hiệu độ cao: 1-2 hình núi nhỏ; có cần cẩu thì viền xanh.
-	var ring := Color("7fd36a") if has_crane else Color(0, 0, 0, 0.55)
-	draw_circle(p, 10.0, Color(0.1, 0.09, 0.07, 0.75))
-	draw_arc(p, 10.0, 0, TAU, 20, ring, 1.5)
-	for i in elev:
-		var o := Vector2((i - (elev - 1) / 2.0) * 7.0, 3.0)
-		draw_colored_polygon(PackedVector2Array([p + o + Vector2(-5, 0), p + o + Vector2(5, 0), p + o + Vector2(0, -9)]), Color("d8d2c2"))
 
 
 func _draw_buildings(t: Dictionary, c: Vector2) -> void:

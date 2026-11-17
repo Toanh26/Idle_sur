@@ -7,7 +7,22 @@ Prototype 2D màn hình dọc làm bằng **Godot 4.3+** (GDScript), theo tài l
 1. Cài Godot 4.3 trở lên (bản Standard, không cần .NET).
 2. Mở Godot → **Import** → chọn file `project.godot` trong thư mục này.
 3. Bấm **F5**. Cửa sổ mô phỏng màn hình điện thoại dọc.
-4. Muốn chạy trên Android: *Project → Export → Android* (cần cài Android export template theo hướng dẫn của Godot).
+4. Xuất APK cho Android: xem mục **Xuất APK** bên dưới (preset Android đã có sẵn trong `export_presets.cfg`).
+
+## Xuất APK
+
+Cần cài một lần:
+1. **Export template**: trong Godot → *Editor → Manage Export Templates → Download and Install* (đúng phiên bản Godot đang dùng).
+2. **OpenJDK 17** (ví dụ bản Temurin của Adoptium).
+3. **Android SDK**: dễ nhất là cài Android Studio, mở một lần để nó tải SDK; trong *SDK Manager* tick thêm Platform-Tools, Build-Tools, SDK Platform và Command-line Tools bản mới nhất.
+4. Trong Godot → *Editor → Editor Settings → Export → Android*: điền **Java SDK Path** (thư mục JDK 17) và **Android SDK Path** (Windows thường là `%LOCALAPPDATA%\Android\Sdk`).
+
+Mỗi lần xuất:
+1. *Project → Export…* → chọn preset **Android** → **Export Project…**.
+2. Giữ tick **Export With Debug** (bản cá nhân, Godot tự ký bằng debug keystore) → lưu ra `build/FrontierIdle.apk`.
+3. Chép APK sang điện thoại, cho phép cài ứng dụng từ nguồn không xác định rồi mở file để cài. Hoặc cắm cáp và chạy `adb install -r build/FrontierIdle.apk`.
+
+Lỗi hay gặp: nút Export bị mờ hoặc báo thiếu template → cài lại export template đúng phiên bản; báo lỗi Java/SDK → kiểm tra lại 2 đường dẫn ở bước 4 và dùng JDK 17.
 
 ## Đã có trong prototype
 
